@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('register', [AuthController::class, 'RegisterUser']);
+
 Route::post('login', [AuthController::class, 'Login']);
 Route::post('forgot-password', [AuthController::class, 'ForgetPassword']);
 Route::post('reset-password/{token}', [AuthController::class, 'SetPassword']);
