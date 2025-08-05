@@ -53,107 +53,116 @@ class Handler extends ExceptionHandler
      */
     public function register(): void
     {
+        // 1. Handle internal errors
         $this->renderable(function (InternalErrorException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-                    'message' => 'Record not found.',   "from" => "handler NotFoundHttpException",
-                ], 404);
+                    'message' => 'An internal server error occurred.',
+                    'from' => 'InternalErrorException',
+                ], 500);
             }
         });
+
+        // 2. Handle route not found
         $this->renderable(function (NotFoundHttpException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-                    'message' => 'Record not found.',   "from" => "handler NotFoundHttpException",
+                    'message' => 'Route not found.',
+                    'from' => 'NotFoundHttpException',
                 ], 404);
             }
         });
+
+        // 3. Handle unauthenticated requests
         $this->renderable(function (AuthenticationException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-                    'message' => 'Unauthenticated.',   "from" => "handler AuthenticationException",
+                    'message' => 'Authentication required.',
+                    'from' => 'AuthenticationException',
                 ], 401);
             }
         });
 
-
+        // 4. Handle missing model instances
         $this->renderable(function (ModelNotFoundException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-                    'message' => $e->getModel() . ' model not found!',   "from" => "handler",
-                ], 404);
-            }
-        });
-       
-        $this->renderable(function (RouteNotFoundException $e, $request) {
-            if ($request->is('api/*') || $request->is('admin/*')) {
-                return response()->json([
-                    'message' => 'unauthenticated or  Invalid Request!',
-                    "from" => "handler RouteNotFoundException",
+                    'message' => class_basename($e->getModel()) . ' not found.',
+                    'from' => 'ModelNotFoundException',
                 ], 404);
             }
         });
 
+        // 5. Handle unauthorized route access
+        $this->renderable(function (RouteNotFoundException $e, $request) {
+            if ($request->is('api/*') || $request->is('admin/*')) {
+                return response()->json([
+                    'message' => 'Unauthorized or invalid route access.',
+                    'from' => 'RouteNotFoundException',
+                ], 403);
+            }
+        });
+
+        // 6. Handle validation errors
         $this->renderable(function (ValidationException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-                    'message' => $e->getMessage(),
-                    "status" => "error"
+                    'message' => 'Validation failed.',
+                    'errors' => $e->getMessage(),
+                    'from' => 'ValidationException',
                 ], 422);
             }
         });
 
-        // $this->renderable(function (Swift_TransportException $e, $request) {
-        //     if ($request->is('tenant/*') ) {
-        //         return response()->json([
-        //             "from" => "handler Swift_TransportException",
-        //             'message' => "The mail service has encountered a problem. Please retry later or contact the site admin."
-        //         ], 404);
-        //     }
-        // });
-
+        // 7. Handle database query issues
         $this->renderable(function (QueryException $e, $request) {
             if ($request->is('api/*') || $request->is('admin/*')) {
-                $errorCode = $e->errorInfo[1];
+                $errorCode = $e->errorInfo[1] ?? null;
+
                 switch ($errorCode) {
-                    case 1062: //code dublicate entry
-                        return response([
-                            'message' => 'Duplicate Entry',
-                            "from" => "handler",
-                        ], Response::HTTP_NOT_FOUND);
-                        break;
-                    case 1452: //Cannot add or update a child row
-                        return response([
-                            'message' => trans("messages.SOMETHING_WENT_WRONG"),
-                            "from" => "handler",
-                        ], Response::HTTP_NOT_FOUND);
-                        break;
-                    case 1364: // you can handel any other error
-                        return response([
-                            "exception" => $e,
-                            'message' => $e->getMessage(),
-                            "from" => "handler",
-                        ], Response::HTTP_NOT_FOUND);
-                        break;
+                    case 1062: // Duplicate entry
+                        return response()->json([
+                            'message' => 'Duplicate entry found.',
+                            'from' => 'QueryException (1062)',
+                        ], 409);
+
+                    case 1452: // Foreign key constraint fails
+                        return response()->json([
+                            'message' => 'Cannot add or update due to foreign key constraint.',
+                            'from' => 'QueryException (1452)',
+                        ], 400);
+
+                    case 1364: // Field doesn’t have a default value
+                        return response()->json([
+                            'message' => 'Missing required field value.',
+                            'from' => 'QueryException (1364)',
+                        ], 400);
+
+                    case 1054: // Unknown column
                     case '42S22':
-                    case 1054: // you can handel any other error
-                        return response([
-                            "exception" => $e,
-                            'message' => "Database Query Issue",
-                            "from" => "handler",
-                        ], Response::HTTP_NOT_FOUND);
-                        break;
+                        return response()->json([
+                            'message' => 'Invalid column name in database query.',
+                            'from' => 'QueryException (1054/42S22)',
+                        ], 400);
+
+                    default:
+                        return response()->json([
+                            'message' => 'A database query error occurred.',
+                            'error' => $e->getMessage(),
+                            'from' => 'QueryException (default)',
+                        ], 500);
                 }
             }
         });
 
+        // 8. Catch-all handler for other exceptions
         $this->renderable(function (Exception $e, $request) {
-            dd($e);
-         if ($request->is('api/*') || $request->is('admin/*')) {
-
+            if ($request->is('api/*') || $request->is('admin/*')) {
                 return response()->json([
-
-                    'message' => $e->getMessage(),  "from" => "handler Exception",
-                ], 404);
+                    'message' => 'An unexpected error occurred.',
+                    'error' => $e->getMessage(),
+                    'from' => 'Exception',
+                ], 500);
             }
         });
     }
